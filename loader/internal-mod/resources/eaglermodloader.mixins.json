@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "eaglermodloader.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["BootstrapMixin", "MinecraftMixin"],
+  "mixins": ["BootstrapMixin", "ClientMainMixin", "MinecraftMixin"],
   "injectors": { "defaultRequire": 1 }
 }

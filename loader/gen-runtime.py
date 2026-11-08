@@ -112,6 +112,16 @@ def main():
                     expr = "new %s()" % value.replace('$', '.')
                 line = '\t\tadd(%s, %s, %s, () -> %s);' % (java_str(key), java_str(m["id"]), java_str(value), expr)
                 (client_lines if key == "client" or env == "client" else lines).append(line)
+    # Fabric API's registry sync delays freezing the built-in registries until the mods have registered
+    # their content; on the client its own mixin freezes them later in the Minecraft constructor, but the
+    # singleplayer server worker has no such hook (Fabric uses the dedicated server's Main), so we do it.
+    tracker = "net.fabricmc.fabric.impl.registry.sync.trackers.vanilla.BlockInitTracker"
+    if class_members(classes, tracker) is not None:
+        freeze = ("\t\tnet.minecraft.core.registries.BuiltInRegistries.bootStrap();\n"
+                  "\t\t%s.postFreeze();\n"
+                  "\t\tnet.minecraft.world.item.CreativeModeTabs.validate();" % tracker)
+    else:
+        freeze = "\t\t// registries were already frozen by Bootstrap.bootStrap()"
     mod_rows = []
     for m in mods:
         mod_rows.append("\t\t{ %s, %s, %s }," % (java_str(m["id"]), java_str(m["parent"]) if m["parent"] else "null", java_long_str(m["fabricModJson"])))
@@ -173,10 +183,15 @@ public final class GeneratedMods {
 %s
 	}
 
+	/** Singleplayer server worker only: freeze the built-in registries after the mods' "main" entrypoints. */
+	public static void freezeRegistries() {
+%s
+	}
+
 	private GeneratedMods() {
 	}
 }
-""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines))
+""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w").write(src)
     print("[gen] %d mods, %d entrypoints (%d client-only)" % (len(mods), len(lines) + len(client_lines), len(client_lines)))

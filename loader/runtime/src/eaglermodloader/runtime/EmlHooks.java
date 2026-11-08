@@ -8,13 +8,25 @@ import net.fabricmc.loader.impl.FabricLoaderImpl;
 
 /**
  * Where the game hands control to the mods. Called from mixins in the built-in "eaglermodloader" mod:
- * startCommon() at the start of Bootstrap.bootStrap() (client and singleplayer server worker), and
- * startClient() in the Minecraft constructor, the same place Fabric Loader starts client mods.
+ * startClient() in the Minecraft constructor, the same place Fabric Loader starts mods on the client
+ * (after Bootstrap.bootStrap(), with the registries not yet frozen: Fabric API freezes them later), and
+ * afterBootstrap() at the end of Bootstrap.bootStrap(), which starts the mods in the singleplayer server worker.
  */
 public final class EmlHooks {
-	private static boolean common, client;
+	private static boolean common, client, clientProgram;
 
 	private EmlHooks() {
+	}
+
+	/** Called at the start of the client's main(); the server worker never calls it. */
+	public static void markClient() {
+		clientProgram = true;
+	}
+
+	public static void afterBootstrap() {
+		if (clientProgram || common) return;
+		startCommon();
+		GeneratedMods.freezeRegistries();
 	}
 
 	public static void startCommon() {
