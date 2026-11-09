@@ -145,8 +145,7 @@ jobs:
           if [ "$DIAGNOSTIC" = "true" ]; then
             FAST="$FAST --diagnostic"
             # also keep readable names in the singleplayer server worker's crash reports
-            sed -i 's/^\(\s*\)obfuscated = true$/\1obfuscated = false/' target_teavm_wasm_gc_server/build.gradle.kts
-            grep -n "obfuscated =" target_teavm_wasm_gc_server/build.gradle.kts
+            export EAGLER_SERVER_DIAGNOSTIC=1
           fi
           node wasm-toolchain/build-single-html.js $FAST --output ../out/eaglercraft-26.2-modded.html
           python3 ../loader/inject-addons.py ../addons ../out/eaglercraft-26.2-modded.html
