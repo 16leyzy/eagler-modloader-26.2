@@ -1,6 +1,9 @@
 package eaglermodloader.runtime;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -12,8 +15,11 @@ import net.fabricmc.loader.api.metadata.ModMetadata;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 
 /**
- * A built-in mod. Its classes were compiled into the game and its assets merged into the game's
- * resources, so it has no files of its own: getRootPaths() is empty and findPath() finds nothing.
+ * A built-in mod. Its classes were compiled into the game and its files packed into assets.epk:
+ * assets/ and data/ merged with the game's, everything else under eml-mods/<mod id>/ (see
+ * loader/merge-assets.py). findPath() copies a file from there to the browser's game directory
+ * (.eml-mods/<mod id>/<version>/...) the first time it's asked for, so mods can read it as a normal Path.
+ * getRootPaths() is empty: the mod's files can be looked up but not listed.
  */
 public final class EmlModContainer implements ModContainer {
 	private final ModMetadata metadata;
@@ -28,7 +34,30 @@ public final class EmlModContainer implements ModContainer {
 
 	@Override public ModMetadata getMetadata() { return metadata; }
 	@Override public List<Path> getRootPaths() { return Collections.emptyList(); }
-	@Override public Optional<Path> findPath(String file) { return Optional.empty(); }
+
+	@Override
+	public synchronized Optional<Path> findPath(String file) {
+		String rel = file.replace('\\', '/');
+		while (rel.startsWith("/")) rel = rel.substring(1);
+		if (rel.isEmpty() || rel.contains("..")) return Optional.empty();
+		Path out = cachePath(rel);
+		if (Files.isRegularFile(out)) return Optional.of(out);
+		byte[] data = GeneratedMods.resource("eml-mods/" + metadata.getId() + "/" + rel);
+		if (data == null && (rel.startsWith("assets/") || rel.startsWith("data/"))) data = GeneratedMods.resource(rel);
+		if (data == null) return Optional.empty();
+		try {
+			Files.createDirectories(out.getParent());
+			Files.write(out, data);
+			return Optional.of(out);
+		} catch (IOException | RuntimeException e) {
+			System.err.println("[eagler-modloader] could not unpack " + rel + " of " + metadata.getId() + ": " + e);
+			return Optional.empty();
+		}
+	}
+
+	private Path cachePath(String rel) {
+		return getRootPath().resolve(rel);
+	}
 
 	@Override
 	public ModOrigin getOrigin() {
@@ -43,7 +72,11 @@ public final class EmlModContainer implements ModContainer {
 
 	@Override public Optional<ModContainer> getContainingMod() { return Optional.ofNullable(parent); }
 	@Override public Collection<ModContainer> getContainedMods() { return Collections.unmodifiableList(children); }
-	@Override @Deprecated public Path getRootPath() { throw new UnsupportedOperationException("built-in mod " + metadata.getId() + " has no files"); }
-	@Override @Deprecated public Path getPath(String file) { throw new UnsupportedOperationException("built-in mod " + metadata.getId() + " has no files"); }
+	/** Where this mod's files are unpacked; per version, so an updated mod never sees old files. */
+	@Override @Deprecated public Path getRootPath() { return Paths.get(".eml-mods", metadata.getId(), metadata.getVersion().getFriendlyString()); }
+	@Override @Deprecated public Path getPath(String file) {
+		Optional<Path> p = findPath(file);
+		return p.isPresent() ? p.get() : getRootPath().resolve(file.startsWith("/") ? file.substring(1) : file);
+	}
 	@Override public String toString() { return metadata.getId() + " " + metadata.getVersion(); }
 }

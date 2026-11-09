@@ -40,6 +40,7 @@ public final class GeneratedMods {
 	public static java.util.List<EmlEntrypoint> entrypoints(String key) { return java.util.Collections.emptyList(); }
 	public static void enableClient() { }
 	public static void freezeRegistries() { }
+	public static byte[] resource(String path) { return null; }
 }
 EOF
 javac --release 21 -nowarn -proc:none -cp "$DEPS" -d "$IM/classes" \

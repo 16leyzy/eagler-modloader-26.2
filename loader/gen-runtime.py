@@ -188,6 +188,11 @@ public final class GeneratedMods {
 %s
 	}
 
+	/** A file packed into the game's assets (assets.epk), or null. */
+	public static byte[] resource(String path) {
+		return net.lax1dude.eaglercraft.v1_8.EagRuntime.getResourceBytes(path);
+	}
+
 	private GeneratedMods() {
 	}
 }
