@@ -69,6 +69,23 @@ if new not in s:
 print("server worker: game classes first on the classpath")
 EOF
 
+# Eaglercraft's java.lang.ScopedValue records which values were bound only after binding them, so
+# every value used once stays "bound" (to null) afterwards. Fabric API's registry sync then reads
+# null from IS_SERVER.orElse(false) when joining a world. Record the states first.
+python3 - "$WS/teavm-compat/src/main/java/net/lax1dude/eaglercraft/v1_8/teavmcompat/java/lang/TScopedValue.java" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "Object[] savedValues = bind();\n\t\t\tboolean[] savedBound = savedBoundStates();"
+new = "boolean[] savedBound = savedBoundStates();\n\t\t\tObject[] savedValues = bind();"
+if old in s:
+    open(p, "w").write(s.replace(old, new))
+    print("ScopedValue: fixed restoring bound states")
+elif new in s:
+    print("ScopedValue: already fixed")
+else:
+    sys.exit("eagler-modloader: TScopedValue.java changed; check the bound-state fix")
+EOF
+
 mkdir -p "$HOME/.gradle/init.d"
 cat > "$HOME/.gradle/init.d/eagler-modloader.gradle" <<EOF
 // eagler-modloader: weave Fabric mods into :game right after it compiles.
