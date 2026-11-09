@@ -118,7 +118,12 @@ jobs:
           mkdir -p ../out
           npm install --no-audit --no-fund
           if [ "$RELEASE" = "true" ]; then FAST=""; else FAST="--fast-package"; fi
-          if [ "$DIAGNOSTIC" = "true" ]; then FAST="$FAST --diagnostic"; fi
+          if [ "$DIAGNOSTIC" = "true" ]; then
+            FAST="$FAST --diagnostic"
+            # also keep readable names in the singleplayer server worker's crash reports
+            sed -i 's/^\(\s*\)obfuscated = true$/\1obfuscated = false/' target_teavm_wasm_gc_server/build.gradle.kts
+            grep -n "obfuscated =" target_teavm_wasm_gc_server/build.gradle.kts
+          fi
           node wasm-toolchain/build-single-html.js $FAST --output ../out/eaglercraft-26.2-modded.html
           python3 ../loader/inject-addons.py ../addons ../out/eaglercraft-26.2-modded.html
           grep -v '^#' ../eml/disabled-injectors.txt > ../out/turned-off-injectors.txt 2>/dev/null || true
