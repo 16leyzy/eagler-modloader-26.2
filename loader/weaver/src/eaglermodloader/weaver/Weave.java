@@ -162,6 +162,7 @@ public final class Weave {
 		verifyMixedClasses(classesOut);
 
 		System.out.println("[weave] game classes: " + game);
+		if (ConstructorOrder.reordered > 0) System.out.println("[weave] constructors put in order for name-only hooks in " + ConstructorOrder.reordered + " game classes");
 		System.out.println("[weave] mod classes: " + modCls + " from " + (mods.size()) + " mods (incl. builtin)");
 		for (java.util.Map.Entry<String, Integer> e : skipped.entrySet()) System.out.println("[weave] " + e.getValue() + " mod classes skipped: " + e.getKey());
 		if (!failures.isEmpty()) {
@@ -444,6 +445,7 @@ public final class Weave {
 		try {
 			byte[] pre = launcher.getClassByteArray(name, true);
 			if (pre == null) return null;
+			if (failures != null) pre = ConstructorOrder.apply(pre); // game classes
 			return mixin.transformClassBytes(name, name, pre);
 		} catch (Throwable t) {
 			Throwable c = t;
