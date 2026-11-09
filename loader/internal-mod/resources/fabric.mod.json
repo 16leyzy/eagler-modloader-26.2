@@ -4,10 +4,23 @@
   "version": "0.1.0",
   "name": "Eagler Mod Loader",
   "description": "Builds Fabric mods into Eaglercraft 26.2 and starts them in the browser.",
-  "authors": ["omigabeta"],
-  "contact": { "sources": "https://github.com/omigabeta/eagler-modloader-26.2" },
+  "authors": [
+    "OmegaCat_1325"
+  ],
+  "contributors": [
+    "Claude"
+  ],
+  "contact": {
+    "sources": "https://github.com/omigabeta/eagler-modloader-26.2",
+    "issues": "https://github.com/omigabeta/eagler-modloader-26.2/issues"
+  },
   "license": "Apache-2.0",
+  "icon": "assets/eaglermodloader/icon.png",
   "environment": "*",
-  "mixins": ["eaglermodloader.mixins.json"],
-  "depends": { "minecraft": "*" }
+  "mixins": [
+    "eaglermodloader.mixins.json"
+  ],
+  "depends": {
+    "minecraft": "*"
+  }
 }
