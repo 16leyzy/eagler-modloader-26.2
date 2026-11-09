@@ -51,6 +51,23 @@ ls -la "$RUN/mods"
 python3 "$REPO/loader/merge-assets.py" "$WS/game/src/main/resources" "$RUN"/mods/*.jar
 echo "::endgroup::"
 
+# The singleplayer server worker is linked from a slice of game.jar that the workspace puts last on
+# its classpath. Library classes the mods changed (DataFixerUpper's TaggedChoice, ...) are in that
+# slice, so it has to come first, as game.jar does for the client, or the originals win.
+python3 - "$WS/target_teavm_wasm_gc_server/build.gradle.kts" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = """	val slicedClasspath = standardWasmGCTask.classpath.files
+		.filter { it.name != "game.jar" }
+		.plus(File(eaglerServerGameJar))"""
+new = """	val slicedClasspath = listOf(File(eaglerServerGameJar)) + standardWasmGCTask.classpath.files
+		.filter { it.name != "game.jar" }"""
+if new not in s:
+    if old not in s: sys.exit("eagler-modloader: could not put the server's game classes first in " + p)
+    open(p, "w").write(s.replace(old, new))
+print("server worker: game classes first on the classpath")
+EOF
+
 mkdir -p "$HOME/.gradle/init.d"
 cat > "$HOME/.gradle/init.d/eagler-modloader.gradle" <<EOF
 // eagler-modloader: weave Fabric mods into :game right after it compiles.
