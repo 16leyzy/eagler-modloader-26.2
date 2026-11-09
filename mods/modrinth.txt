@@ -10,7 +10,7 @@ fpsdisplay               # FPS
 cps-plus                 # CPS
 clean-keystrokes         # Keystrokes
 gui-clock                # Clock
-coordinates-display      # Coordinates
+gui-compass              # Coordinates (with facing direction)
 ukus-armor-hud           # Armor Status
 toggle-sprint-display    # Sprint Status
 appleskin                # Saturation Bar
