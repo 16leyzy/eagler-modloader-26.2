@@ -57,6 +57,8 @@ jobs:
           git fetch -q --depth 1 origin "$WORKSPACE_COMMIT"
           git checkout -q FETCH_HEAD
           chmod +x gradlew
+          # Gradle itself is downloaded on first use; retry, since that download sometimes times out
+          for i in 1 2 3 4 5; do ./gradlew --no-daemon --version >/dev/null && break; echo "Gradle download failed (try $i), retrying"; sleep $((i * 20)); done
 
       # Quick checks first, so a mod that can't work stops the build in minutes instead of after the
       # long browser compile.
