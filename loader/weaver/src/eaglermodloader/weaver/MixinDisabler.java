@@ -89,8 +89,27 @@ final class MixinDisabler {
 		ClassNode cn = new ClassNode();
 		new ClassReader(data).accept(cn, 0);
 		boolean all = methods.contains("*");
+		Set<String> off = new HashSet<>();
+		for (MethodNode m : cn.methods) if (all || methods.contains(m.name)) off.add(m.name);
+		// Injectors that hook the same game method and pass state to each other through MixinExtras
+		// sugar (@Local/@Share LocalRefs) only work together: with one of them off, the others read
+		// values that were never set. Turn those off too.
+		Set<String> sharedTargets = new HashSet<>();
+		for (MethodNode m : cn.methods) if (off.contains(m.name) && usesSugar(m)) sharedTargets.addAll(targets(m));
+		if (!sharedTargets.isEmpty()) {
+			for (MethodNode m : cn.methods) {
+				if (off.contains(m.name) || !usesSugar(m)) continue;
+				for (String t : targets(m)) {
+					if (sharedTargets.contains(t)) {
+						off.add(m.name);
+						System.out.println("[weave] also off: " + cn.name.replace('/', '.') + "#" + m.name + " (shares state with a turned-off injector)");
+						break;
+					}
+				}
+			}
+		}
 		for (MethodNode m : cn.methods) {
-			if (all || methods.contains(m.name)) {
+			if (off.contains(m.name)) {
 				m.visibleAnnotations = strip(m.visibleAnnotations);
 				m.invisibleAnnotations = strip(m.invisibleAnnotations);
 				// MixinExtras sugar on the parameters (@Local, @Share) only makes sense on an injector
@@ -101,6 +120,43 @@ final class MixinDisabler {
 		ClassWriter cw = new ClassWriter(0);
 		cn.accept(cw);
 		return cw.toByteArray();
+	}
+
+	/** Names of the game methods an injector hooks (its annotation's "method" values, without descriptors). */
+	private static Set<String> targets(MethodNode m) {
+		Set<String> out = new HashSet<>();
+		for (List<AnnotationNode> list : java.util.Arrays.asList(m.visibleAnnotations, m.invisibleAnnotations)) {
+			if (list == null) continue;
+			for (AnnotationNode a : list) {
+				if (!a.desc.startsWith("Lorg/spongepowered/asm/mixin/injection/") && !a.desc.startsWith("Lcom/llamalad7/mixinextras/injector/")) continue;
+				if (a.values == null) continue;
+				for (int i = 0; i + 1 < a.values.size(); i += 2) {
+					if (!"method".equals(a.values.get(i))) continue;
+					Object v = a.values.get(i + 1);
+					for (Object o : v instanceof List ? (List<?>) v : java.util.Collections.singletonList(v)) {
+						String t = String.valueOf(o);
+						int paren = t.indexOf('(');
+						if (paren >= 0) t = t.substring(0, paren);
+						int dot = t.lastIndexOf(';');
+						if (dot >= 0) t = t.substring(dot + 1); // "Lpkg/Owner;name"
+						out.add(t);
+					}
+				}
+			}
+		}
+		return out;
+	}
+
+	/** True if a parameter carries MixinExtras sugar (@Local, @Share, ...). */
+	private static boolean usesSugar(MethodNode m) {
+		for (List<AnnotationNode>[] params : java.util.Arrays.asList(m.visibleParameterAnnotations, m.invisibleParameterAnnotations)) {
+			if (params == null) continue;
+			for (List<AnnotationNode> list : params) {
+				if (list == null) continue;
+				for (AnnotationNode a : list) if (a.desc.startsWith("Lcom/llamalad7/mixinextras/sugar/")) return true;
+			}
+		}
+		return false;
 	}
 
 	/** Removes injector annotations and MixinExtras ones (@Definition, @Expression, ...); null if none are left. */
