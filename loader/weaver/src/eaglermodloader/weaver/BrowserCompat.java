@@ -64,6 +64,7 @@ final class BrowserCompat {
 		}
 		System.out.println("[compat] " + n + " methods switched off for the browser");
 		NettyTypeChecks.apply(classes);
+		ReflectionScan.apply(classes);
 	}
 
 	private static void neuter(MethodNode m) {

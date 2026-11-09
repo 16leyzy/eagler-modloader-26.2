@@ -68,6 +68,52 @@ KNOWN = {
     "preLaunch": "net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint",
 }
 
+def generic_expr(sig):
+    """Java expression for a field's generic signature, e.g. Lpkg/Option<Lpkg/Cfg$Mode;>;"""
+    pos = [0]
+    def cls(name):
+        return name.replace("/", ".").replace("$", ".") + ".class"
+    def parse():
+        c = sig[pos[0]]
+        if c == "*":
+            pos[0] += 1; return "Object.class"
+        if c == "+":
+            pos[0] += 1; return parse()
+        if c == "-":
+            pos[0] += 1; parse(); return "Object.class"
+        if c == "[":
+            pos[0] += 1; inner = parse()
+            return inner[:-6] + "[].class" if inner.endswith(".class") and not inner.startswith("new ") else "Object[].class"
+        if c == "L":
+            pos[0] += 1
+            name, args = "", []
+            while True:
+                ch = sig[pos[0]]
+                if ch == "<":
+                    pos[0] += 1; args = []
+                    while sig[pos[0]] != ">":
+                        args.append(parse())
+                    pos[0] += 1
+                elif ch == ".":
+                    name += "$"; pos[0] += 1; args = []
+                elif ch == ";":
+                    pos[0] += 1; break
+                else:
+                    name += ch; pos[0] += 1
+            if not args:
+                return cls(name)
+            return "new eaglermodloader.runtime.EmlReflect.Parameterized(%s, new java.lang.reflect.Type[] { %s })" % (cls(name), ", ".join(args))
+        if c in "ZBCSIJFD":
+            pos[0] += 1
+            return {"Z": "boolean", "B": "byte", "C": "char", "S": "short", "I": "int", "J": "long", "F": "float", "D": "double"}[c] + ".class"
+        raise ValueError("type variable")
+    try:
+        e = parse()
+        return e if e.startswith("new ") else None
+    except Exception:
+        return None
+
+
 def main():
     mods_json, classes, loader_version, out = sys.argv[1:5]
     mods = json.load(open(mods_json))
@@ -149,6 +195,16 @@ def main():
 \t\tif (screen != null) net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.beforeTick(screen).invoker().beforeTick(screen);""" % ext)
     else:
         busy = "\t\t// no mod hooks the loading screen"
+    # generic field types for mods' reflection (loader/weaver ReflectionScan writes eml-reflect.txt)
+    generic = []
+    rf = os.path.join(classes, "eml-reflect.txt")
+    if os.path.exists(rf):
+        for line in open(rf):
+            if line.startswith("G "):
+                key, sig = line[2:].strip().split(" ", 1)
+                expr = generic_expr(sig)
+                if expr:
+                    generic.append("\t\tcase %s: return %s;" % (java_str(key), expr))
     mod_rows = []
     for m in mods:
         mod_rows.append("\t\t{ %s, %s, %s }," % (java_str(m["id"]), java_str(m["parent"]) if m["parent"] else "null", java_long_str(m["fabricModJson"])))
@@ -225,6 +281,14 @@ public final class GeneratedMods {
 %s
 	}
 
+	/** The generic type of a field mods read by reflection ("class#field"), or null if not known. */
+	public static java.lang.reflect.Type genericFieldType(String key) {
+		switch (key) {
+%s
+		default: return null;
+		}
+	}
+
 	/** A file packed into the game's assets (assets.epk), or null. */
 	public static byte[] resource(String path) {
 		return net.lax1dude.eaglercraft.v1_8.EagRuntime.getResourceBytes(path);
@@ -233,7 +297,7 @@ public final class GeneratedMods {
 	private GeneratedMods() {
 	}
 }
-""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze, "\n".join(compat) or "\t\t// none", busy)
+""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze, "\n".join(compat) or "\t\t// none", busy, "\n".join(generic))
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w").write(src)
     print("[gen] %d mods, %d entrypoints (%d client-only)" % (len(mods), len(lines) + len(client_lines), len(client_lines)))
