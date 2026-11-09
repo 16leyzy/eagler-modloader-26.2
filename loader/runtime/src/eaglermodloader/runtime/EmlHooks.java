@@ -66,5 +66,6 @@ public final class EmlHooks {
 		startCommon();
 		runMain(); // client-only mods' "main" entrypoints
 		FabricLoaderImpl.INSTANCE.invokeEntrypoints("client", ClientModInitializer.class, ClientModInitializer::onInitializeClient);
+		GeneratedMods.afterClientStart();
 	}
 }

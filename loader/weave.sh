@@ -41,6 +41,7 @@ public final class GeneratedMods {
 	public static void enableClient() { }
 	public static void freezeRegistries() { }
 	public static byte[] resource(String path) { return null; }
+	public static void afterClientStart() { }
 }
 EOF
 javac --release 21 -nowarn -proc:none -cp "$DEPS" -d "$IM/classes" \

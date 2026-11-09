@@ -122,6 +122,24 @@ def main():
                   "\t\tnet.minecraft.world.item.CreativeModeTabs.validate();" % tracker)
     else:
         freeze = "\t\t// registries were already frozen by Bootstrap.bootStrap()"
+    # Browser fixes for specific mods, generated only when the mod is built in.
+    compat = []
+    if all(class_members(classes, c) is not None for c in (
+            "com.terraformersmc.modmenu.gui.ModsScreen", "com.terraformersmc.modmenu.util.ModMenuScreenTexts",
+            "net.fabricmc.fabric.api.client.screen.v1.ScreenEvents", "net.fabricmc.fabric.api.client.screen.v1.Screens")):
+        # Mod Menu: mods are built in, so there's no mods folder to open and nothing to drag and drop
+        compat.append("""\t\tcom.terraformersmc.modmenu.config.ModMenuConfig.DISABLE_DRAG_AND_DROP.setValue(true);
+\t\tnet.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+\t\t\tif (!(screen instanceof com.terraformersmc.modmenu.gui.ModsScreen)) return;
+\t\t\tfor (net.minecraft.client.gui.components.AbstractWidget b : net.fabricmc.fabric.api.client.screen.v1.Screens.getWidgets(screen)) {
+\t\t\t\tif (com.terraformersmc.modmenu.util.ModMenuScreenTexts.MODS_FOLDER.equals(b.getMessage())) {
+\t\t\t\t\tb.visible = false;
+\t\t\t\t\tb.active = false;
+\t\t\t\t} else if (net.minecraft.network.chat.CommonComponents.GUI_DONE.equals(b.getMessage())) {
+\t\t\t\t\tb.setX(w / 2 - b.getWidth() / 2);
+\t\t\t\t}
+\t\t\t}
+\t\t});""")
     mod_rows = []
     for m in mods:
         mod_rows.append("\t\t{ %s, %s, %s }," % (java_str(m["id"]), java_str(m["parent"]) if m["parent"] else "null", java_long_str(m["fabricModJson"])))
@@ -188,6 +206,11 @@ public final class GeneratedMods {
 %s
 	}
 
+	/** Client only, after the client mods have started: browser fixes for specific mods. */
+	public static void afterClientStart() {
+%s
+	}
+
 	/** A file packed into the game's assets (assets.epk), or null. */
 	public static byte[] resource(String path) {
 		return net.lax1dude.eaglercraft.v1_8.EagRuntime.getResourceBytes(path);
@@ -196,7 +219,7 @@ public final class GeneratedMods {
 	private GeneratedMods() {
 	}
 }
-""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze)
+""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze, "\n".join(compat) or "\t\t// none")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w").write(src)
     print("[gen] %d mods, %d entrypoints (%d client-only)" % (len(mods), len(lines) + len(client_lines), len(client_lines)))
