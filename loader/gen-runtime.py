@@ -140,6 +140,15 @@ def main():
 \t\t\t\t}
 \t\t\t}
 \t\t});""")
+    # Fabric API's screen events around the world loading screen (see the internal mod's MinecraftMixin)
+    ext = "net.fabricmc.fabric.impl.client.screen.GuiExtensions"
+    if class_members(classes, ext) is not None:
+        busy = ("""\t\tnet.minecraft.client.gui.Gui gui = ((net.minecraft.client.Minecraft) minecraft).gui;
+\t\tnet.minecraft.client.gui.screens.Screen screen = gui.screen();
+\t\t((%s) (Object) gui).setTickingScreen(screen);
+\t\tif (screen != null) net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.beforeTick(screen).invoker().beforeTick(screen);""" % ext)
+    else:
+        busy = "\t\t// no mod hooks the loading screen"
     mod_rows = []
     for m in mods:
         mod_rows.append("\t\t{ %s, %s, %s }," % (java_str(m["id"]), java_str(m["parent"]) if m["parent"] else "null", java_long_str(m["fabricModJson"])))
@@ -211,6 +220,11 @@ public final class GeneratedMods {
 %s
 	}
 
+	/** Client only: Eaglercraft's busy screen is about to tick while a singleplayer world loads. */
+	public static void beforeBusyScreenTick(Object minecraft) {
+%s
+	}
+
 	/** A file packed into the game's assets (assets.epk), or null. */
 	public static byte[] resource(String path) {
 		return net.lax1dude.eaglercraft.v1_8.EagRuntime.getResourceBytes(path);
@@ -219,7 +233,7 @@ public final class GeneratedMods {
 	private GeneratedMods() {
 	}
 }
-""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze, "\n".join(compat) or "\t\t// none")
+""" % (java_str(loader_version), "\n".join(mod_rows), "\n".join(lines), "\n".join(client_lines), freeze, "\n".join(compat) or "\t\t// none", busy)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     open(out, "w").write(src)
     print("[gen] %d mods, %d entrypoints (%d client-only)" % (len(mods), len(lines) + len(client_lines), len(client_lines)))

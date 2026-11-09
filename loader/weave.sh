@@ -42,6 +42,7 @@ public final class GeneratedMods {
 	public static void freezeRegistries() { }
 	public static byte[] resource(String path) { return null; }
 	public static void afterClientStart() { }
+	public static void beforeBusyScreenTick(Object minecraft) { }
 }
 EOF
 javac --release 21 -nowarn -proc:none -cp "$DEPS" -d "$IM/classes" \
