@@ -146,6 +146,9 @@ jobs:
             FAST="$FAST --diagnostic"
             # also keep readable names in the singleplayer server worker's crash reports
             export EAGLER_SERVER_DIAGNOSTIC=1
+            # the workspace only installs a named server build for local debugging; install it here too
+            sed -i 's/^  if (diagnostic) {$/  if (false) {/' wasm-toolchain/link-server-standalone.js
+            grep -q '^  if (false) {$' wasm-toolchain/link-server-standalone.js
           fi
           node wasm-toolchain/build-single-html.js $FAST --output ../out/eaglercraft-26.2-modded.html
           python3 ../loader/inject-addons.py ../addons ../out/eaglercraft-26.2-modded.html
