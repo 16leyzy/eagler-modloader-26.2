@@ -69,6 +69,29 @@ if new not in s:
 print("server worker: game classes first on the classpath")
 EOF
 
+# Minecraft opens links (chat links, Mod Menu's Website/Issues buttons, ...) with Util.OS.openUri,
+# which in Eaglercraft is still the desktop version (it runs xdg-open). Open web links in a new tab.
+python3 - "$WS/game/src/main/java/net/minecraft/util/Util.java" <<'EOF'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = "      public void openUri(final URI uri) {\n         try {\n            Process process"
+new = """      public void openUri(final URI uri) {
+         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(java.util.Locale.ROOT);
+         if (scheme.equals("http") || scheme.equals("https") || scheme.equals("mailto")) {
+            net.lax1dude.eaglercraft.v1_8.EagRuntime.openLink(uri.toString());
+            return;
+         }
+         try {
+            Process process"""
+if new in s:
+    print("links: already open in the browser")
+elif old in s:
+    open(p, "w").write(s.replace(old, new, 1))
+    print("links: open in a new browser tab")
+else:
+    sys.exit("eagler-modloader: Util.OS.openUri changed; check the link fix")
+EOF
+
 # Eaglercraft's java.lang.ScopedValue records which values were bound only after binding them, so
 # every value used once stays "bound" (to null) afterwards. Fabric API's registry sync then reads
 # null from IS_SERVER.orElse(false) when joining a world. Record the states first.
