@@ -13,6 +13,21 @@ Eaglercraft is Minecraft compiled to run in a web browser. A browser can't load 
 
 To remove a mod, delete its jar and build again.
 
+The build checks the mods first, in a few minutes, before the long part:
+
+- **Jars that can't be built in stop the build right away**: Forge, NeoForge and Quilt mods, files
+  that aren't mods, and mods that Fabric says are missing a dependency or are for another
+  Minecraft version. The build's summary page (open the run in the *Actions* tab) says which jar
+  and why.
+- **Code that usually can't run in a browser is listed but doesn't stop the build**: native
+  libraries, desktop graphics, raw network connections (like voice chat) and similar. The mod may
+  lose those features or crash when it uses them. The list is in the build summary and the
+  release notes.
+- **Mod injections that don't fit Eaglercraft's version of the game are turned off** and listed in
+  the release notes.
+
+Some problems only show up while playing, so try the mod in the game too.
+
 ## Add-ons (Java servers with a Microsoft account)
 
 Some things can't be done by a mod inside the browser game. Scripts in [`addons/`](addons) are added to

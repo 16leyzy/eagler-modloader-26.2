@@ -3,10 +3,8 @@ name: Weave check
 # Fast check of the build-time Fabric step: compiles the game and applies the mods in mods/
 # without the long browser link. Uploads the weave report and mods.json.
 
+# The build workflow now runs these checks itself before compiling; this one is for manual debugging.
 on:
-  push:
-    branches: [main]
-    paths: ["mods/**", "loader/**", ".github/workflows/weave-check.yml"]
   workflow_dispatch:
     inputs:
       debug_class:
