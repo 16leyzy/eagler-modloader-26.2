@@ -1,0 +1,79 @@
+name: Find and check mods
+
+# Manual only, and quick (no browser compile): searches Modrinth for Fabric mods for 26.2, downloads
+# the ones in mods/modrinth.txt (with what they require) and runs the build's early compatibility
+# checks on everything in mods/. Use it to try mods before a full build.
+
+on:
+  workflow_dispatch:
+    inputs:
+      search:
+        description: "Search Modrinth for these (comma separated, optional)"
+        required: false
+      check:
+        description: "Download mods/modrinth.txt and check the mods"
+        type: boolean
+        default: true
+
+env:
+  WORKSPACE_REPO: https://github.com/kingjoeishere/Eaglercraft-26.2-Workspace
+  WORKSPACE_COMMIT: f73bff91f0f0840bc958c09ab536dbba1e146b2e
+
+jobs:
+  mods:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Search Modrinth
+        if: ${{ inputs.search != '' }}
+        env:
+          TERMS: ${{ inputs.search }}
+        run: |
+          IFS=',' read -ra T <<< "$TERMS"
+          python3 tools/modrinth.py search 26.2 "${T[@]}" | tee search.txt
+      - name: Download mods/modrinth.txt
+        if: ${{ inputs.check }}
+        run: |
+          [ -f mods/modrinth.txt ] && python3 tools/modrinth.py download 26.2 mods/modrinth.txt mods
+          ls -la mods
+      - uses: actions/setup-java@v4
+        if: ${{ inputs.check }}
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            25
+      - name: Download the Eaglercraft 26.2 workspace
+        if: ${{ inputs.check }}
+        run: |
+          git init -q workspace && cd workspace
+          git remote add origin "$WORKSPACE_REPO"
+          git fetch -q --depth 1 origin "$WORKSPACE_COMMIT" && git checkout -q FETCH_HEAD
+          chmod +x gradlew
+          for i in 1 2 3 4 5; do ./gradlew --no-daemon --version >/dev/null && break; sleep $((i * 20)); done
+      - name: "Check the mods: can each jar be built in?"
+        if: ${{ inputs.check }}
+        run: |
+          mkdir -p eml
+          python3 loader/scan-mods.py mods eml/mod-check.md workspace || true
+          cat eml/mod-check.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Set up build-time Fabric
+        if: ${{ inputs.check }}
+        run: chmod +x loader/weave.sh && loader/weave.sh workspace eml
+      - name: "Check the mods: apply them to the game"
+        if: ${{ inputs.check }}
+        working-directory: workspace
+        run: ./gradlew --no-daemon --console=plain :game:compileJava
+      - name: Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-check
+          path: |
+            search.txt
+            mods/*.jar
+            eml/mod-check.md
+            eml/weave.log
+            eml/disabled-injectors.txt
+          retention-days: 7
