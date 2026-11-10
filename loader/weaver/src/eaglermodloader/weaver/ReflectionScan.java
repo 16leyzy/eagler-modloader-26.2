@@ -33,7 +33,8 @@ import org.objectweb.asm.tree.TypeInsnNode;
  *
  * Mod code that uses reflection (Class.getDeclaredFields(), getDeclaredConstructor(), newInstance(), ...)
  * or hands objects to Gson (which builds and fills them by reflection) marks the classes named in the
- * same method (X.class, casts, fields it reads) and its own class as reflected, and with them the types
+ * same method (X.class, casts, fields it reads) and its own class as reflected; so does any mod class
+ * named as a class literal anywhere in mod code (usually handed to such a library). With them come the types
  * of their fields and their superclasses, so nested settings objects work too. Fields, constructors
  * and methods of reflected classes stay available to reflection. They're
  * written to eml-reflect.txt in the game classes ("C class"), which the reflection supplier added to
@@ -93,6 +94,14 @@ final class ReflectionScan {
 				if (lists) {
 					reflected.add(cn.name);
 					for (String n : named) if (!n.startsWith("java/") && !isGame(n)) reflected.add(n);
+				}
+				// a mod class named as a class literal (Config.class) is nearly always handed to a library
+				// that uses reflection on it (Cloth Config's AutoConfig.register, YACL, Gson, ...)
+				for (AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
+					if (in instanceof LdcInsnNode ldc && ldc.cst instanceof Type t && t.getSort() == Type.OBJECT) {
+						String n = t.getInternalName();
+						if (!n.startsWith("java/") && !isGame(n)) reflected.add(n);
+					}
 				}
 			}
 			if (changed) {
