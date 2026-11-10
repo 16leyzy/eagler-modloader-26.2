@@ -73,7 +73,8 @@ public final class EmlHooks {
 			Class<?> c = Class.forName(String.valueOf(System.nanoTime()));
 			Object o = c.getDeclaredConstructors()[0].newInstance();
 			for (java.lang.reflect.Field f : c.getDeclaredFields()) f.set(o, f.get(o));
-			c.newInstance();
+			// (no Class.newInstance(): reaching it made the compiler build every class's no-argument
+			// constructor, client-only ones included in the singleplayer worker)
 		} catch (Throwable t) {
 			System.err.println(t);
 		}
