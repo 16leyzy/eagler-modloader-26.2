@@ -127,7 +127,7 @@ jobs:
           ./gradlew --no-daemon --console=plain -I ../eml/epk.init.gradle :target_lwjgl_desktop:emlPack_sounds :target_lwjgl_desktop:emlPack_music
           ls -la target_teavm/build/web/
 
-      - name: Let TeaVM skip null checks and optimization in methods it can't handle, and build with mods' missing classes
+      - name: Patch TeaVM for mods (null checks, missing classes, reflection, Files.createDirectories)
         run: |
           DEPS="$(ls "$PWD"/eml/deps/*.jar | tr '\n' ':')"
           mkdir -p eml/patch-teavm && cd eml/patch-teavm
@@ -136,6 +136,13 @@ jobs:
           unzip -o -q "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
           java -cp "$DEPS:." PatchTeaVM org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
           jar uf "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
+          # TeaVM's classlib (java.lang.reflect.Constructor/Method, java.nio.file.Files): patched copies go in
+          # Eaglercraft's classlib-override.jar, which every program reads before the stock classlib
+          curl -fsSL --retry 5 -o teavm-classlib.jar https://repo1.maven.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1.jar
+          CL="org/teavm/classlib/java/lang/reflect/TConstructor.class org/teavm/classlib/java/lang/reflect/TMethod.class org/teavm/classlib/java/nio/file/TFiles.class"
+          unzip -o -q teavm-classlib.jar $CL
+          java -cp "$DEPS:." PatchTeaVM $CL
+          jar uf ../../workspace/wasm-toolchain/teavm-eagler-patch/classlib-override.jar $CL
 
       - name: Build the standalone HTML
         working-directory: workspace

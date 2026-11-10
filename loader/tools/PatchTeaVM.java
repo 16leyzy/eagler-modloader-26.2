@@ -19,8 +19,15 @@ import org.objectweb.asm.Opcodes;
  * And ReferenceResolver: a class, method or field the browser doesn't have (used by a mod) is reported
  * as a warning instead of an error. TeaVM already compiles that spot to throw NoClassDefFoundError /
  * NoSuchMethodError / NoSuchFieldError when it runs, but writes no output at all if any error remains.
- * Usage: java PatchTeaVM path/to/NullCheckInsertion.class path/to/TeaVM.class path/to/ReferenceResolver.class
- * (patched in place)
+ * And TConstructor/TMethod (TeaVM's java.lang.reflect.Constructor/Method): in WebAssembly builds the
+ * modifiers TeaVM records for a constructor or method can have the bit newInstance()/invoke() read as
+ * "abstract" set for ordinary public ones, so Constructor.newInstance() threw InstantiationException
+ * (config libraries such as Cloth Config and YACL create their settings objects this way). The
+ * abstract check is dropped; creating an abstract class fails anyway.
+ * And TFiles (java.nio.file.Files): createDirectories() of a one-level path that already exists
+ * ("config") threw FileAlreadyExistsException; like the JDK it now returns when the directory exists.
+ * Usage: java PatchTeaVM CLASS_FILE... (NullCheckInsertion, TeaVM, ReferenceResolver, TConstructor,
+ * TMethod, TFiles; patched in place)
  */
 public class PatchTeaVM {
 	static final String CLS = "org/teavm/model/transformation/NullCheckInsertion";
@@ -31,6 +38,8 @@ public class PatchTeaVM {
 			Path p = Paths.get(a);
 			if (p.toString().endsWith("TeaVM.class")) patchOptimize(p);
 			else if (p.toString().endsWith("ReferenceResolver.class")) patchMissingAsWarnings(p);
+			else if (p.toString().endsWith("TConstructor.class") || p.toString().endsWith("TMethod.class")) patchAbstractCheck(p);
+			else if (p.toString().endsWith("TFiles.class")) patchCreateDirectories(p);
 			else patchNullChecks(p);
 		}
 	}
@@ -57,6 +66,82 @@ public class PatchTeaVM {
 		if (n[0] == 0) throw new IllegalStateException("ReferenceResolver.reportError: no Diagnostics.error call found");
 		Files.write(p, cw.toByteArray());
 		System.out.println("patched " + p + ": missing classes/methods/fields are warnings (" + n[0] + " calls)");
+	}
+
+	/** In newInstance/invoke: "modifiers &amp; Flags.ABSTRACT" becomes "modifiers &amp; 0". */
+	static void patchAbstractCheck(Path p) throws Exception {
+		ClassReader cr = new ClassReader(Files.readAllBytes(p));
+		ClassWriter cw = new ClassWriter(0);
+		final int[] n = { 0 };
+		cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+				MethodVisitor mv = super.visitMethod(access, name, desc, sig, ex);
+				if (!name.equals("newInstance") && !name.equals("invoke")) return mv;
+				return new MethodVisitor(Opcodes.ASM9, mv) {
+					boolean afterModifiers;
+					@Override
+					public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
+						super.visitFieldInsn(op, owner, fname, fdesc);
+						afterModifiers = op == Opcodes.GETFIELD && fname.equals("modifiers");
+					}
+					@Override
+					public void visitInsn(int op) {
+						if (afterModifiers && op == Opcodes.ICONST_1) { op = Opcodes.ICONST_0; n[0]++; }
+						afterModifiers = false;
+						super.visitInsn(op);
+					}
+					@Override public void visitVarInsn(int op, int v) { afterModifiers = false; super.visitVarInsn(op, v); }
+					@Override public void visitMethodInsn(int op, String o, String nm, String d, boolean itf) { afterModifiers = false; super.visitMethodInsn(op, o, nm, d, itf); }
+					@Override public void visitIntInsn(int op, int v) { afterModifiers = false; super.visitIntInsn(op, v); }
+					@Override public void visitLdcInsn(Object v) { afterModifiers = false; super.visitLdcInsn(v); }
+				};
+			}
+		}, 0);
+		if (n[0] == 0 && p.toString().endsWith("TConstructor.class")) throw new IllegalStateException("TConstructor: abstract check not found");
+		Files.write(p, cw.toByteArray());
+		System.out.println("patched " + p + ": abstract check in newInstance/invoke dropped (" + n[0] + ")");
+	}
+
+	/** TFiles.createDirectories: "if (isDirectory(dir)) return dir;" first. */
+	static void patchCreateDirectories(Path p) throws Exception {
+		ClassReader cr = new ClassReader(Files.readAllBytes(p));
+		ClassWriter cw = new ClassWriter(0);
+		final int[] n = { 0 };
+		final String files = cr.getClassName();
+		final String pathType = files.substring(0, files.lastIndexOf('/') + 1) + "TPath";
+		final String linkType = files.substring(0, files.lastIndexOf('/') + 1) + "TLinkOption";
+		cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+				MethodVisitor mv = super.visitMethod(access, name, desc, sig, ex);
+				if (!name.equals("createDirectories") || !desc.startsWith("(L" + pathType + ";")) return mv;
+				return new MethodVisitor(Opcodes.ASM9, mv) {
+					@Override
+					public void visitCode() {
+						super.visitCode();
+						org.objectweb.asm.Label go = new org.objectweb.asm.Label();
+						super.visitVarInsn(Opcodes.ALOAD, 0);
+						super.visitInsn(Opcodes.ICONST_0);
+						super.visitTypeInsn(Opcodes.ANEWARRAY, linkType);
+						super.visitMethodInsn(Opcodes.INVOKESTATIC, files, "isDirectory", "(L" + pathType + ";[L" + linkType + ";)Z", false);
+						super.visitJumpInsn(Opcodes.IFEQ, go);
+						super.visitVarInsn(Opcodes.ALOAD, 0);
+						super.visitInsn(Opcodes.ARETURN);
+						super.visitLabel(go);
+						super.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
+						n[0]++;
+					}
+					@Override
+					public void visitMaxs(int stack, int locals) {
+						super.visitMaxs(Math.max(stack, 2), locals);
+					}
+				};
+			}
+		}, 0);
+		if (n[0] == 0) throw new IllegalStateException("TFiles.createDirectories not found");
+		Files.write(p, cw.toByteArray());
+		System.out.println("patched " + p + ": createDirectories returns when the directory exists");
 	}
 
 	static final String TEAVM = "org/teavm/vm/TeaVM";
