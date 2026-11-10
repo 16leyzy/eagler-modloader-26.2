@@ -49,6 +49,9 @@ final class ReflectionScan {
 	private static final Set<String> REFLECT = Set.of("getDeclaredFields", "getFields", "getDeclaredField", "getField",
 			"getDeclaredMethods", "getMethods", "getDeclaredMethod", "getMethod", "getDeclaredConstructors", "getConstructors",
 			"getDeclaredConstructor", "getConstructor", "newInstance", "getRecordComponents");
+	private static final String[] JDK_COLLECTIONS = { "java.util.ArrayList", "java.util.LinkedList", "java.util.HashMap",
+			"java.util.LinkedHashMap", "java.util.TreeMap", "java.util.HashSet", "java.util.LinkedHashSet", "java.util.TreeSet",
+			"java.util.ArrayDeque", "java.util.Vector", "java.util.concurrent.ConcurrentHashMap", "java.util.concurrent.CopyOnWriteArrayList" };
 	private static final String[] GAME = { "net/minecraft/", "com/mojang/", "net/lax1dude/", "org/spongepowered/", "net/fabricmc/loader/", "eaglermodloader/" };
 
 	static void apply(Path classes) throws IOException {
@@ -148,6 +151,9 @@ final class ReflectionScan {
 				generic++;
 			}
 		}
+		// Gson creates fields declared as a concrete collection (LinkedHashMap, ArrayList, ...) through
+		// their no-argument constructor by reflection, so those constructors must exist too
+		for (String c : JDK_COLLECTIONS) out.append("C ").append(c).append('\n');
 		Files.write(classes.resolve("eml-reflect.txt"), out.toString().getBytes(StandardCharsets.UTF_8));
 		System.out.println("[compat] reflection: " + reflected.size() + " classes readable by reflection, " + generic
 				+ " generic field types, " + rewired + " getGenericType calls rewired");
