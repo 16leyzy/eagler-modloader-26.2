@@ -19,5 +19,3 @@ autogg-fabric            # AutoGG
 nopeeking                # Password Hider
 emoji-type               # Emoji Type
 simple-item-editor       # Item Editor
-sodium                   # Sodium (testing)
-replaymod                # Replay Mod (testing)
