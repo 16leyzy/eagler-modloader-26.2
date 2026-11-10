@@ -16,7 +16,11 @@ import org.objectweb.asm.Opcodes;
  * left without explicit null checks (a null dereference there traps instead of throwing an NPE) and
  * named in the build log.
  * Same for TeaVM.optimizeMethodCacheMiss (the per-method optimizer).
- * Usage: java PatchTeaVM path/to/NullCheckInsertion.class path/to/TeaVM.class (patched in place)
+ * And ReferenceResolver: a class, method or field the browser doesn't have (used by a mod) is reported
+ * as a warning instead of an error. TeaVM already compiles that spot to throw NoClassDefFoundError /
+ * NoSuchMethodError / NoSuchFieldError when it runs, but writes no output at all if any error remains.
+ * Usage: java PatchTeaVM path/to/NullCheckInsertion.class path/to/TeaVM.class path/to/ReferenceResolver.class
+ * (patched in place)
  */
 public class PatchTeaVM {
 	static final String CLS = "org/teavm/model/transformation/NullCheckInsertion";
@@ -26,8 +30,33 @@ public class PatchTeaVM {
 		for (String a : args) {
 			Path p = Paths.get(a);
 			if (p.toString().endsWith("TeaVM.class")) patchOptimize(p);
+			else if (p.toString().endsWith("ReferenceResolver.class")) patchMissingAsWarnings(p);
 			else patchNullChecks(p);
 		}
+	}
+
+	/** ReferenceResolver.reportError: Diagnostics.error -> Diagnostics.warning. */
+	static void patchMissingAsWarnings(Path p) throws Exception {
+		ClassReader cr = new ClassReader(Files.readAllBytes(p));
+		ClassWriter cw = new ClassWriter(0);
+		final int[] n = { 0 };
+		cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+				MethodVisitor mv = super.visitMethod(access, name, desc, sig, ex);
+				if (!name.equals("reportError")) return mv;
+				return new MethodVisitor(Opcodes.ASM9, mv) {
+					@Override
+					public void visitMethodInsn(int op, String owner, String mname, String mdesc, boolean itf) {
+						if (owner.equals("org/teavm/diagnostics/Diagnostics") && mname.equals("error")) { mname = "warning"; n[0]++; }
+						super.visitMethodInsn(op, owner, mname, mdesc, itf);
+					}
+				};
+			}
+		}, 0);
+		if (n[0] == 0) throw new IllegalStateException("ReferenceResolver.reportError: no Diagnostics.error call found");
+		Files.write(p, cw.toByteArray());
+		System.out.println("patched " + p + ": missing classes/methods/fields are warnings (" + n[0] + " calls)");
 	}
 
 	static final String TEAVM = "org/teavm/vm/TeaVM";

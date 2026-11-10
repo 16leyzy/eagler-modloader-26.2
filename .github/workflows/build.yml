@@ -127,15 +127,15 @@ jobs:
           ./gradlew --no-daemon --console=plain -I ../eml/epk.init.gradle :target_lwjgl_desktop:emlPack_sounds :target_lwjgl_desktop:emlPack_music
           ls -la target_teavm/build/web/
 
-      - name: Let TeaVM skip null checks and optimization in methods it can't handle
+      - name: Let TeaVM skip null checks and optimization in methods it can't handle, and build with mods' missing classes
         run: |
           DEPS="$(ls "$PWD"/eml/deps/*.jar | tr '\n' ':')"
           mkdir -p eml/patch-teavm && cd eml/patch-teavm
           javac -nowarn -cp "$DEPS" -d . ../../loader/tools/PatchTeaVM.java
           JAR="$(ls ../../workspace/wasm-toolchain/teavm-eagler-patch/teavm-core-*.jar | head -1)"
-          unzip -o -q "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class
-          java -cp "$DEPS:." PatchTeaVM org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class
-          jar uf "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class
+          unzip -o -q "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
+          java -cp "$DEPS:." PatchTeaVM org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
+          jar uf "$JAR" org/teavm/model/transformation/NullCheckInsertion.class org/teavm/vm/TeaVM.class org/teavm/dependency/ReferenceResolver.class
 
       - name: Build the standalone HTML
         working-directory: workspace
