@@ -43,6 +43,7 @@ public final class GeneratedMods {
 	public static byte[] resource(String path) { return null; }
 	public static void afterClientStart() { }
 	public static void beforeBusyScreenTick(Object minecraft) { }
+	public static java.lang.reflect.Type genericFieldType(String key) { return null; }
 }
 EOF
 javac --release 21 -nowarn -proc:none -cp "$DEPS" -d "$IM/classes" \
@@ -91,6 +92,17 @@ elif old in s:
 else:
     sys.exit("eagler-modloader: Util.OS.openUri changed; check the link fix")
 EOF
+
+# Mods that read and write fields by reflection (Mod Menu's settings, config libraries): the browser
+# compiler keeps field readers/writers only for fields a ReflectionSupplier names. This one names every
+# field of the classes the weave found mods reflecting on (eml-reflect.txt in the game classes).
+TC="$WS/teavm-compat/src/main"
+# the loader's additions to Eaglercraft's TeaVM layer (loader/teavm-compat): java.awt.Color for mods
+# that do colour maths with it, and the reflection supplier
+cp -r "$REPO/loader/teavm-compat/java/." "$TC/java/"
+SVC="$TC/resources/META-INF/services/org.teavm.classlib.ReflectionSupplier"
+grep -qs EmlReflectionSupplier "$SVC" || cat "$REPO/loader/teavm-compat/resources/META-INF/services/org.teavm.classlib.ReflectionSupplier.eml" >> "$SVC"
+echo "teavm-compat: java.awt.Color and the reflection supplier added"
 
 # Eaglercraft's java.lang.ScopedValue records which values were bound only after binding them, so
 # every value used once stays "bound" (to null) afterwards. Fabric API's registry sync then reads

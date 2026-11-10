@@ -13,6 +13,11 @@ Eaglercraft is Minecraft compiled to run in a web browser. A browser can't load 
 
 To remove a mod, delete its jar and build again.
 
+Mods on Modrinth can be listed instead of uploaded: put their slug (the last part of
+`modrinth.com/mod/<slug>`) on a line in `mods/modrinth.txt`. The build downloads the newest Fabric
+version for 26.2 with the mods it requires. To try mods without a full build, run **Find and check
+mods** from the *Actions* tab: it searches Modrinth and runs the quick checks in a few minutes.
+
 The build checks the mods first, in a few minutes, before the long part:
 
 - **Jars that can't be built in stop the build right away**: Forge, NeoForge and Quilt mods, files

@@ -100,8 +100,14 @@ def scan(zf, label, mods, errors):
                     mod["risks"].setdefault(what, set()).update(hit)
 
 def eagler_provided(ws):
-    """Class names (internal form) that Eaglercraft's browser runtime provides itself."""
+    """Class names (internal form) that Eaglercraft's browser runtime (and this loader's additions to it) provide."""
     out = set()
+    here = os.path.dirname(os.path.abspath(__file__))
+    for d, _, files in os.walk(os.path.join(here, "teavm-compat/java/net/lax1dude/eaglercraft/v1_8/teavmcompat")):
+        for f in files:
+            if f.endswith(".java") and f.startswith("T"):
+                rel = os.path.relpath(os.path.join(d, f[1:-5]), os.path.join(here, "teavm-compat/java/net/lax1dude/eaglercraft/v1_8/teavmcompat"))
+                out.add(rel.replace(os.sep, "/"))
     if not ws: return out
     roots = [(os.path.join(ws, "platform-teavm/src/main/java"), None),
              (os.path.join(ws, "teavm-compat/src/main/java/net/lax1dude/eaglercraft/v1_8/teavmcompat"), "T")]

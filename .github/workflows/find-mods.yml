@@ -65,6 +65,12 @@ jobs:
         if: ${{ inputs.check }}
         working-directory: workspace
         run: ./gradlew --no-daemon --console=plain :game:compileJava
+      - name: Show the weave log
+        if: always()
+        run: |
+          [ -f eml/weave.log ] || exit 0
+          grep -E "^\[weave\]|Incompatible|requires|Mod resolution|Unhandled|Caused by|Exception|ERROR|error:|  - " eml/weave.log | grep -v "^\s*at " | head -120
+          echo "----- last lines"; tail -40 eml/weave.log
       - name: Report
         if: always()
         uses: actions/upload-artifact@v4

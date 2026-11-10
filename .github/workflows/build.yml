@@ -60,6 +60,11 @@ jobs:
           # Gradle itself is downloaded on first use; retry, since that download sometimes times out
           for i in 1 2 3 4 5; do ./gradlew --no-daemon --version >/dev/null && break; echo "Gradle download failed (try $i), retrying"; sleep $((i * 20)); done
 
+      - name: Download the mods listed in mods/modrinth.txt
+        run: |
+          if [ -f mods/modrinth.txt ]; then python3 tools/modrinth.py download 26.2 mods/modrinth.txt mods; fi
+          ls mods
+
       # Quick checks first, so a mod that can't work stops the build in minutes instead of after the
       # long browser compile.
       - name: "Check the mods: can each jar be built in? (seconds)"
@@ -184,7 +189,7 @@ jobs:
           {
             if [ "$RELEASE" != "true" ]; then echo "Test build: lighter compression, so the file is a bit larger."; echo; fi
             echo "Eaglercraft 26.2 with these Fabric mods built in (from ${GITHUB_SHA::7}):"
-            echo; ls mods | sed 's/^/- /'
+            echo; ls mods | grep '\.jar$' | sed 's/^/- /'
             if ls addons/*.js >/dev/null 2>&1; then echo; echo "Add-ons:"; echo; ls addons/*.js | xargs -n1 basename | sed 's/^/- /'; fi
             if [ -s eml/mod-check.md ]; then echo; sed 's/^## Mod check$/### Mod check/' eml/mod-check.md; fi
             if [ -s out/turned-off-injectors.txt ]; then
