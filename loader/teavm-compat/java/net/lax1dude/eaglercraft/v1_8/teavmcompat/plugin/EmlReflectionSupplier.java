@@ -63,4 +63,18 @@ public class EmlReflectionSupplier implements ReflectionSupplier {
 		}
 		return out;
 	}
+
+	/** Lets Class.forName find them (see EmlHooks.reflectionRoots); listed up front so it covers all of them. */
+	@Override
+	public Collection<String> getClassesFoundByName(ReflectionContext context) {
+		List<String> out = new ArrayList<>();
+		for (String c : classes(context)) if (context.getClassSource().get(c) != null) out.add(c);
+		return out;
+	}
+
+	/** Lets Class.forName find them (see EmlHooks.reflectionRoots). */
+	@Override
+	public boolean isClassFoundByName(ReflectionContext context, String name) {
+		return classes(context).contains(name);
+	}
 }

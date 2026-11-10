@@ -32,6 +32,7 @@ public final class EmlHooks {
 	public static void startCommon() {
 		if (common) return;
 		common = true;
+		if (reflectionRoots) reflectionRoots();
 		System.out.println("[eagler-modloader] " + FabricLoaderImpl.INSTANCE.containers().size() + " built-in mods (Fabric Loader " + FabricLoaderImpl.VERSION + ")");
 		runMain();
 	}
@@ -56,6 +57,27 @@ public final class EmlHooks {
 	}
 
 	private static final java.util.Set<String> failedHandlers = new java.util.HashSet<>();
+
+	/** Never true; read at run time so the compiler can't drop reflectionRoots(). */
+	private static boolean reflectionRoots = System.currentTimeMillis() < 0;
+
+	/**
+	 * Never runs. The browser compiler only builds constructor callers and field writers for classes it
+	 * sees flowing into getDeclaredConstructors() and Field.set(). Gson and settings libraries get the
+	 * class from a type passed around generically, which it loses track of, so loading settings failed
+	 * with IllegalAccessException. Class.forName stands for every class the reflection supplier lets be
+	 * found by name (the ones mods use reflection on), so this makes the compiler build those for them.
+	 */
+	private static void reflectionRoots() {
+		try {
+			Class<?> c = Class.forName(String.valueOf(System.nanoTime()));
+			Object o = c.getDeclaredConstructors()[0].newInstance();
+			for (java.lang.reflect.Field f : c.getDeclaredFields()) f.set(o, f.get(o));
+			c.newInstance();
+		} catch (Throwable t) {
+			System.err.println(t);
+		}
+	}
 
 	/**
 	 * A mod's @Inject handler threw; it was skipped (see loader/weaver HandlerGuard). Reported once
