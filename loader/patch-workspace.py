@@ -4,6 +4,8 @@
 Usage: patch-workspace.py WORKSPACE
 - ServiceLoader.findFirst(): registers the donor in loader/teavm-compat with Eaglercraft's JdkMethodInjector.
 - glfwGetMouseButton(): added to Eaglercraft's GLFW stand-in.
+- Reader/BufferedReader.transferTo (donors in loader/teavm-compat), Array.setInt and the other primitive
+  setters, and Files.newDirectoryStream(dir, glob), added to Eaglercraft's donors for Array and Files.
 - ServerFunctionLibrary: mods' datapack functions (.mcfunction) are compiled right away instead of as
   async tasks the loader then waits on, which the browser's single-threaded server can't do (vanilla
   ships no functions, so Eaglercraft never hit this); a function that fails to compile is logged.
@@ -23,11 +25,37 @@ def patch(path, old, new, what):
     open(path, "w").write(s.replace(old, new, 1))
 
 
+def append_to_class(path, code, marker, what):
+    """Adds code before the class's closing brace (once)."""
+    s = open(path).read()
+    if marker in s:
+        return
+    end = s.rstrip().rfind("}")
+    if end < 0:
+        sys.exit("eagler-modloader: %s changed; check the %s patch" % (os.path.basename(path), what))
+    open(path, "w").write(s[:end] + code + s[end:])
+
+
 def main():
     ws = sys.argv[1]
     inj = os.path.join(ws, "teavm-compat/src/main/java/net/lax1dude/eaglercraft/v1_8/teavmcompat/plugin/JdkMethodInjector.java")
     anchor = '\t\t{ "Base64Inject", "java.util.Base64", false },\n'
-    patch(inj, anchor, anchor + '\t\t{ "ServiceLoaderInject", "java.util.ServiceLoader", false },\n', "ServiceLoader donor")
+    patch(inj, anchor, anchor + '\t\t{ "ServiceLoaderInject", "java.util.ServiceLoader", false },\n'
+          '\t\t{ "ReaderInject", "java.io.Reader", false },\n'
+          '\t\t{ "BufferedReaderInject", "java.io.BufferedReader", false },\n', "ServiceLoader and Reader donors")
+
+    inject = os.path.join(ws, "teavm-compat/src/main/java/net/lax1dude/eaglercraft/v1_8/teavmcompat/inject")
+    setters = "".join(
+        "\n\tpublic static void set%s(Object array, int index, %s value) { // added by eagler-modloader\n"
+        "\t\tjava.lang.reflect.Array.set(array, index, %s.valueOf(value));\n\t}\n" % (n, t, b)
+        for n, t, b in [("Boolean", "boolean", "Boolean"), ("Byte", "byte", "Byte"), ("Char", "char", "Character"),
+                        ("Short", "short", "Short"), ("Int", "int", "Integer"), ("Long", "long", "Long"),
+                        ("Float", "float", "Float"), ("Double", "double", "Double")])
+    append_to_class(os.path.join(inject, "ArrayInject.java"), setters, "public static void setInt(", "Array setters")
+    append_to_class(os.path.join(inject, "FilesInject.java"),
+        "\n\tpublic static java.nio.file.DirectoryStream<Path> newDirectoryStream(Path dir, String glob) throws IOException { // added by eagler-modloader\n"
+        "\t\treturn net.lax1dude.eaglercraft.v1_8.teavmcompat.EmlNio.newDirectoryStream(dir, glob);\n\t}\n",
+        "newDirectoryStream(Path dir, String glob)", "Files.newDirectoryStream")
 
     glfw = os.path.join(ws, "platform-teavm/src/main/java/org/lwjgl/glfw/GLFW.java")
     anchor = "\tpublic static String glfwGetKeyName("
@@ -89,7 +117,8 @@ def main():
             throw new IllegalStateException("TeaVM reported severe problems");
         }"""
     patch(linker, old, new, "missing-class handling")
-    print("workspace: ServiceLoader.findFirst, glfwGetMouseButton, datapack functions; mods' missing classes don't stop the build")
+    print("workspace: ServiceLoader.findFirst, Reader.transferTo, Array setters, Files.newDirectoryStream, glfwGetMouseButton,"
+          " datapack functions; mods' missing classes don't stop the build")
 
 
 if __name__ == "__main__":

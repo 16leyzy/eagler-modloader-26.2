@@ -26,8 +26,10 @@ import org.objectweb.asm.Opcodes;
  * abstract check is dropped; creating an abstract class fails anyway.
  * And TFiles (java.nio.file.Files): createDirectories() of a one-level path that already exists
  * ("config") threw FileAlreadyExistsException; like the JDK it now returns when the directory exists.
+ * And TCharset (java.nio.charset.Charset): forName/isSupported accept "UTF8" for UTF-8, as the JDK does
+ * (TOML and other config libraries ask for it by that name).
  * Usage: java PatchTeaVM CLASS_FILE... (NullCheckInsertion, TeaVM, ReferenceResolver, TConstructor,
- * TMethod, TFiles; patched in place)
+ * TMethod, TFiles, TCharset; patched in place)
  */
 public class PatchTeaVM {
 	static final String CLS = "org/teavm/model/transformation/NullCheckInsertion";
@@ -40,6 +42,7 @@ public class PatchTeaVM {
 			else if (p.toString().endsWith("ReferenceResolver.class")) patchMissingAsWarnings(p);
 			else if (p.toString().endsWith("TConstructor.class") || p.toString().endsWith("TMethod.class")) patchAbstractCheck(p);
 			else if (p.toString().endsWith("TFiles.class")) patchCreateDirectories(p);
+			else if (p.toString().endsWith("TCharset.class")) patchCharsetAlias(p);
 			else patchNullChecks(p);
 		}
 	}
@@ -142,6 +145,44 @@ public class PatchTeaVM {
 		if (n[0] == 0) throw new IllegalStateException("TFiles.createDirectories not found");
 		Files.write(p, cw.toByteArray());
 		System.out.println("patched " + p + ": createDirectories returns when the directory exists");
+	}
+
+	/** TCharset.forName/isSupported(String): "UTF8" (any case) becomes "UTF-8" first. */
+	static void patchCharsetAlias(Path p) throws Exception {
+		ClassReader cr = new ClassReader(Files.readAllBytes(p));
+		ClassWriter cw = new ClassWriter(0);
+		final int[] n = { 0 };
+		cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
+			@Override
+			public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
+				MethodVisitor mv = super.visitMethod(access, name, desc, sig, ex);
+				if ((access & Opcodes.ACC_STATIC) == 0 || !(name.equals("forName") || name.equals("isSupported"))
+						|| !desc.startsWith("(Ljava/lang/String;)")) return mv;
+				return new MethodVisitor(Opcodes.ASM9, mv) {
+					@Override
+					public void visitCode() {
+						super.visitCode();
+						org.objectweb.asm.Label go = new org.objectweb.asm.Label();
+						super.visitLdcInsn("UTF8");
+						super.visitVarInsn(Opcodes.ALOAD, 0);
+						super.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equalsIgnoreCase", "(Ljava/lang/String;)Z", false);
+						super.visitJumpInsn(Opcodes.IFEQ, go);
+						super.visitLdcInsn("UTF-8");
+						super.visitVarInsn(Opcodes.ASTORE, 0);
+						super.visitLabel(go);
+						super.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
+						n[0]++;
+					}
+					@Override
+					public void visitMaxs(int stack, int locals) {
+						super.visitMaxs(Math.max(stack, 2), locals);
+					}
+				};
+			}
+		}, 0);
+		if (n[0] == 0) throw new IllegalStateException("TCharset.forName not found");
+		Files.write(p, cw.toByteArray());
+		System.out.println("patched " + p + ": \"UTF8\" accepted for UTF-8 (" + n[0] + " methods)");
 	}
 
 	static final String TEAVM = "org/teavm/vm/TeaVM";
