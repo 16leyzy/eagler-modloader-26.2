@@ -15,10 +15,10 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 import eaglermodloader.runtime.EmlEntrypoint;
+import eaglermodloader.runtime.EmlHooks;
 import eaglermodloader.runtime.EmlModContainer;
 import eaglermodloader.runtime.GeneratedMods;
 import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.EntrypointException;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.MappingResolver;
 import net.fabricmc.loader.api.ModContainer;
@@ -87,7 +87,6 @@ public final class FabricLoaderImpl implements FabricLoader {
 	public <T> List<EntrypointContainer<T>> getEntrypointContainers(String key, Class<T> type) {
 		load();
 		List<EntrypointContainer<T>> ret = new ArrayList<>();
-		EntrypointException err = null;
 		for (EmlEntrypoint e : GeneratedMods.entrypoints(key)) {
 			EmlModContainer mod = mods.get(e.modId);
 			if (mod == null) continue;
@@ -104,28 +103,22 @@ public final class FabricLoaderImpl implements FabricLoader {
 					@Override public String getDefinition() { return e.value; }
 				});
 			} catch (Throwable t) {
-				System.err.println("[eagler-modloader] entrypoint '" + key + "' " + e.value + " of mod '" + e.modId + "' failed: " + t);
-				t.printStackTrace();
-				if (err == null) err = new EntrypointException(key, e.modId, t);
+				// skipped, not fatal: one broken mod shouldn't stop the game (see EmlHooks.failed)
+				EmlHooks.failed(e.modId, "entrypoint '" + key + "' " + e.value, t);
 			}
 		}
-		if (err != null) throw err;
 		return ret;
 	}
 
 	@Override
 	public <T> void invokeEntrypoints(String key, Class<T> type, Consumer<? super T> invoker) {
-		RuntimeException err = null;
 		for (EntrypointContainer<T> c : getEntrypointContainers(key, type)) {
 			try {
 				invoker.accept(c.getEntrypoint());
 			} catch (Throwable t) {
-				System.err.println("[eagler-modloader] entrypoint '" + key + "' of mod '" + c.getProvider().getMetadata().getId() + "' failed: " + t);
-				t.printStackTrace();
-				if (err == null) err = new RuntimeException("Could not execute entrypoint stage '" + key + "' due to errors, provided by '" + c.getProvider().getMetadata().getId() + "'", t);
+				EmlHooks.failed(c.getProvider().getMetadata().getId(), key, t);
 			}
 		}
-		if (err != null) throw err;
 	}
 
 	@Override public ObjectShare getObjectShare() { return objectShare; }

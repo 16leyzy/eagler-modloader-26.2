@@ -39,10 +39,10 @@ public final class EmlHooks {
 	/**
 	 * Runs every "main" entrypoint that hasn't run yet. The client bootstraps (and so runs the common
 	 * ones) before the Minecraft constructor adds the client-only mods, whose "main" entrypoints then run here.
+	 * A mod that fails to start is reported and skipped, so one broken mod doesn't stop the game (often
+	 * it uses something the browser doesn't have).
 	 */
 	private static void runMain() {
-		// (TeaVM's Throwable.addSuppressed isn't usable here, so each failure is reported on its own)
-		RuntimeException err = null;
 		for (EmlEntrypoint e : GeneratedMods.entrypoints("main")) {
 			if (e.ran) continue;
 			e.ran = true;
@@ -50,12 +50,15 @@ public final class EmlHooks {
 				Object o = e.get();
 				if (o instanceof ModInitializer) ((ModInitializer) o).onInitialize();
 			} catch (Throwable t) {
-				System.err.println("[eagler-modloader] main entrypoint " + e.value + " of mod '" + e.modId + "' failed: " + t);
-				t.printStackTrace();
-				if (err == null) err = new RuntimeException("Could not execute entrypoint stage 'main' due to errors, provided by '" + e.modId + "' (" + e.value + ")", t);
+				failed(e.modId, "main", t);
 			}
 		}
-		if (err != null) throw err;
+	}
+
+	/** Reports a mod that failed to start; the game carries on without it. */
+	public static void failed(String modId, String stage, Throwable t) {
+		System.err.println("[eagler-modloader] mod '" + modId + "' failed to start (" + stage + "), continuing without it: " + t);
+		t.printStackTrace();
 	}
 
 	public static void startClient(File runDir, Object game) {

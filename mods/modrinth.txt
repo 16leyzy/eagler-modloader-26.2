@@ -2,7 +2,7 @@
 # One project per line: the slug from its Modrinth URL (modrinth.com/mod/<slug>), or "slug@version" to pin one.
 # The newest Fabric version for Minecraft 26.2 is used. Jars you put in mods/ yourself are built in too.
 
-ok-zoomer                # Zoom (smooth zoom, scroll to adjust)
+logical-zoom             # Zoom
 gamma-utils              # Fullbright
 clear-fog                # No Fog
 block-outline-customizer # Block Outline

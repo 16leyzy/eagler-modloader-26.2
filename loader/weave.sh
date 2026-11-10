@@ -98,11 +98,18 @@ EOF
 # field of the classes the weave found mods reflecting on (eml-reflect.txt in the game classes).
 TC="$WS/teavm-compat/src/main"
 # the loader's additions to Eaglercraft's TeaVM layer (loader/teavm-compat): java.awt.Color for mods
-# that do colour maths with it, and the reflection supplier
+# that do colour maths with it, the reflection supplier, Log4j's API, OSHI's tuples and a ServiceLoader donor
 cp -r "$REPO/loader/teavm-compat/java/." "$TC/java/"
 SVC="$TC/resources/META-INF/services/org.teavm.classlib.ReflectionSupplier"
 grep -qs EmlReflectionSupplier "$SVC" || cat "$REPO/loader/teavm-compat/resources/META-INF/services/org.teavm.classlib.ReflectionSupplier.eml" >> "$SVC"
 echo "teavm-compat: java.awt.Color and the reflection supplier added"
+
+# Missing pieces some mods use (more of loader/teavm-compat): Log4j's logging API, OSHI's tuples,
+# ServiceLoader.findFirst() (a donor for Eaglercraft's JdkMethodInjector) and glfwGetMouseButton.
+# A mod may also use a class or method the browser doesn't have at all (a desktop library, a newer JDK
+# method). TeaVM compiles that spot to throw NoClassDefFoundError/NoSuchMethodError when it runs and
+# reports it as an error; Eaglercraft's linker stops on any error, so only those are let through.
+python3 "$REPO/loader/patch-workspace.py" "$WS"
 
 # Eaglercraft's java.lang.ScopedValue records which values were bound only after binding them, so
 # every value used once stays "bound" (to null) afterwards. Fabric API's registry sync then reads
