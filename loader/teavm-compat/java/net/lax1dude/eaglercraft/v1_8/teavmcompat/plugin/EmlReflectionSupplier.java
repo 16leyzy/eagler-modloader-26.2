@@ -13,8 +13,13 @@ import org.teavm.classlib.ReflectionContext;
 import org.teavm.classlib.ReflectionSupplier;
 import org.teavm.model.ClassReader;
 import org.teavm.model.FieldReader;
+import org.teavm.model.MethodDescriptor;
+import org.teavm.model.MethodReader;
 
-/** Added by eagler-modloader: fields of the classes mods use reflection on (eml-reflect.txt). */
+/**
+ * Added by eagler-modloader: the fields, constructors and methods of the classes mods use reflection on
+ * (eml-reflect.txt, written by the weave), so Field.get/set, Constructor.newInstance and Gson work for them.
+ */
 public class EmlReflectionSupplier implements ReflectionSupplier {
 	private Set<String> classes;
 
@@ -30,7 +35,7 @@ public class EmlReflectionSupplier implements ReflectionSupplier {
 			} catch (Exception e) {
 				System.err.println("[eagler-modloader] could not read eml-reflect.txt: " + e);
 			}
-			System.out.println("[eagler-modloader] reflection: fields of " + classes.size() + " mod classes kept readable");
+			System.out.println("[eagler-modloader] reflection: fields, constructors and methods of " + classes.size() + " mod classes kept available to reflection");
 		}
 		return classes;
 	}
@@ -42,6 +47,18 @@ public class EmlReflectionSupplier implements ReflectionSupplier {
 		if (cls == null) return Collections.emptyList();
 		List<String> out = new ArrayList<>();
 		for (FieldReader f : cls.getFields()) out.add(f.getName());
+		return out;
+	}
+
+	@Override
+	public Collection<MethodDescriptor> getAccessibleMethods(ReflectionContext context, String className) {
+		if (!classes(context).contains(className)) return Collections.emptyList();
+		ClassReader cls = context.getClassSource().get(className);
+		if (cls == null) return Collections.emptyList();
+		List<MethodDescriptor> out = new ArrayList<>();
+		for (MethodReader m : cls.getMethods()) {
+			if (!m.getName().equals("<clinit>")) out.add(m.getDescriptor());
+		}
 		return out;
 	}
 }

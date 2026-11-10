@@ -18,19 +18,24 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.InnerClassNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TypeInsnNode;
 
 /**
  * Lets mods read and write fields by reflection (config libraries such as Mod Menu's save settings
  * this way). The browser compiler only keeps field readers/writers for fields it's told about, and has
  * no generic types.
  *
- * Mod code that lists fields (Class.getDeclaredFields(), getFields(), getDeclaredField(), getField())
- * marks the classes named in the same method (X.class) and its own class as reflected. They're
+ * Mod code that uses reflection (Class.getDeclaredFields(), getDeclaredConstructor(), newInstance(), ...)
+ * or hands objects to Gson (which builds and fills them by reflection) marks the classes named in the
+ * same method (X.class, casts, fields it reads) and its own class as reflected, and with them the types
+ * of their fields and their superclasses, so nested settings objects work too. Fields, constructors
+ * and methods of reflected classes stay available to reflection. They're
  * written to eml-reflect.txt in the game classes ("C class"), which the reflection supplier added to
  * Eaglercraft's TeaVM plugin reads, so all their fields stay readable and writable. Their fields with
  * generic types are listed too ("G class#field signature") for GeneratedMods.genericFieldType(), and
@@ -40,7 +45,9 @@ final class ReflectionScan {
 	private ReflectionScan() {
 	}
 
-	private static final Set<String> LIST_FIELDS = Set.of("getDeclaredFields", "getFields", "getDeclaredField", "getField");
+	private static final Set<String> REFLECT = Set.of("getDeclaredFields", "getFields", "getDeclaredField", "getField",
+			"getDeclaredMethods", "getMethods", "getDeclaredMethod", "getMethod", "getDeclaredConstructors", "getConstructors",
+			"getDeclaredConstructor", "getConstructor", "newInstance", "getRecordComponents");
 	private static final String[] GAME = { "net/minecraft/", "com/mojang/", "net/lax1dude/", "org/spongepowered/", "net/fabricmc/loader/", "eaglermodloader/" };
 
 	static void apply(Path classes) throws IOException {
@@ -63,7 +70,8 @@ final class ReflectionScan {
 				Set<String> named = new TreeSet<>();
 				for (AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
 					if (in instanceof MethodInsnNode mi) {
-						if (mi.owner.equals("java/lang/Class") && LIST_FIELDS.contains(mi.name)) lists = true;
+						if ((mi.owner.equals("java/lang/Class") || mi.owner.equals("java/lang/reflect/Constructor")) && REFLECT.contains(mi.name)) lists = true;
+						if (mi.owner.startsWith("com/google/gson/")) lists = true; // Gson builds and fills objects by reflection
 						if (mi.owner.equals("java/lang/reflect/Field") && mi.name.equals("getGenericType") && mi.desc.equals("()Ljava/lang/reflect/Type;")) {
 							mi.setOpcode(Opcodes.INVOKESTATIC);
 							mi.owner = "eaglermodloader/runtime/EmlReflect";
@@ -74,11 +82,17 @@ final class ReflectionScan {
 						}
 					} else if (in instanceof LdcInsnNode ldc && ldc.cst instanceof Type t && t.getSort() == Type.OBJECT) {
 						named.add(t.getInternalName());
+					} else if (in instanceof TypeInsnNode ti && ti.getOpcode() == Opcodes.CHECKCAST) {
+						named.add(Type.getObjectType(ti.desc).getSort() == Type.OBJECT ? ti.desc : Type.getType(ti.desc).getElementType().getInternalName());
+					} else if (in instanceof FieldInsnNode fi) {
+						Type ft = Type.getType(fi.desc);
+						if (ft.getSort() == Type.ARRAY) ft = ft.getElementType();
+						if (ft.getSort() == Type.OBJECT) named.add(ft.getInternalName());
 					}
 				}
 				if (lists) {
 					reflected.add(cn.name);
-					for (String n : named) if (!n.startsWith("java/")) reflected.add(n);
+					for (String n : named) if (!n.startsWith("java/") && !isGame(n)) reflected.add(n);
 				}
 			}
 			if (changed) {
@@ -87,9 +101,34 @@ final class ReflectionScan {
 				Files.write(p, cw.toByteArray());
 			}
 		}
+		Map<String, ClassNode> cache = new HashMap<>();
+		// the types of reflected classes' fields (nested settings objects) and their superclasses
+		List<String> todo = new ArrayList<>(reflected);
+		while (!todo.isEmpty()) {
+			ClassNode cn = read(classes, todo.remove(todo.size() - 1), cache);
+			if (cn == null) continue;
+			Set<String> more = new TreeSet<>();
+			if (cn.superName != null) more.add(cn.superName);
+			for (FieldNode f : cn.fields) {
+				if ((f.access & Opcodes.ACC_STATIC) != 0 && (f.access & Opcodes.ACC_FINAL) != 0) continue;
+				Type ft = Type.getType(f.desc);
+				if (ft.getSort() == Type.ARRAY) ft = ft.getElementType();
+				if (ft.getSort() == Type.OBJECT) more.add(ft.getInternalName());
+				if (f.signature != null) {
+					for (String part : f.signature.split("[<;>]")) {
+						int l = part.indexOf('L');
+						if (l >= 0 && part.length() > l + 1) more.add(part.substring(l + 1));
+					}
+				}
+			}
+			for (String n : more) {
+				if (n.startsWith("java/") || isGame(n) || reflected.contains(n) || read(classes, n, cache) == null) continue;
+				reflected.add(n);
+				todo.add(n);
+			}
+		}
 		StringBuilder out = new StringBuilder();
 		int generic = 0;
-		Map<String, ClassNode> cache = new HashMap<>();
 		for (String c : reflected) {
 			ClassNode cn = read(classes, c, cache);
 			if (cn == null) continue;

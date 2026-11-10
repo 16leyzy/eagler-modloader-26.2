@@ -55,6 +55,20 @@ public final class EmlHooks {
 		}
 	}
 
+	private static final java.util.Set<String> failedHandlers = new java.util.HashSet<>();
+
+	/**
+	 * A mod's @Inject handler threw; it was skipped (see loader/weaver HandlerGuard). Reported once
+	 * per handler, since it may run every frame.
+	 */
+	public static void handlerFailed(Throwable t, String modId, String where) {
+		synchronized (failedHandlers) {
+			if (!failedHandlers.add(where)) return;
+		}
+		System.err.println("[eagler-modloader] mod '" + modId + "' hook in " + where + " failed and is skipped: " + t);
+		t.printStackTrace();
+	}
+
 	/** Reports a mod that failed to start; the game carries on without it. */
 	public static void failed(String modId, String stage, Throwable t) {
 		System.err.println("[eagler-modloader] mod '" + modId + "' failed to start (" + stage + "), continuing without it: " + t);
