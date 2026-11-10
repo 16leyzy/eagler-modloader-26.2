@@ -14,6 +14,9 @@ on:
         description: "Download mods/modrinth.txt and check the mods"
         type: boolean
         default: true
+      inspect:
+        description: "Disassemble mod classes whose name contains this (optional, for debugging)"
+        required: false
 
 env:
   WORKSPACE_REPO: https://github.com/kingjoeishere/Eaglercraft-26.2-Workspace
@@ -38,12 +41,23 @@ jobs:
           [ -f mods/modrinth.txt ] && python3 tools/modrinth.py download 26.2 mods/modrinth.txt mods
           ls -la mods
       - uses: actions/setup-java@v4
-        if: ${{ inputs.check }}
+        if: ${{ inputs.check || inputs.inspect != '' }}
         with:
           distribution: temurin
           java-version: |
             17
             25
+      - name: Disassemble mod classes
+        if: ${{ inputs.inspect != '' }}
+        env:
+          PATTERN: ${{ inputs.inspect }}
+        run: |
+          [ -f mods/modrinth.txt ] && ! ls mods/*.jar >/dev/null 2>&1 || true
+          [ "${{ inputs.check }}" = "true" ] || python3 tools/modrinth.py download 26.2 mods/modrinth.txt mods >/dev/null
+          mkdir -p inspect && cd inspect
+          for j in ../mods/*.jar; do unzip -o -q "$j" '*.class' 'META-INF/jars/*' 2>/dev/null || true; done
+          for j in META-INF/jars/*.jar; do [ -f "$j" ] && unzip -o -q "$j" '*.class' 2>/dev/null || true; done
+          find . -name '*.class' | grep -i "$PATTERN" | head -8 | while read c; do echo "===== $c"; javap -c -p "$c" | head -400; done
       - name: Download the Eaglercraft 26.2 workspace
         if: ${{ inputs.check }}
         run: |
