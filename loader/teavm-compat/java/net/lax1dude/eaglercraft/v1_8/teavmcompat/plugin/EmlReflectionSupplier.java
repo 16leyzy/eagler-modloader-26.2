@@ -17,7 +17,7 @@ import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReader;
 
 /**
- * Added by eagler-modloader: the fields, constructors and methods of the classes mods use reflection on
+ * Added by eagler-modloader: the fields and constructors of the classes mods use reflection on
  * (eml-reflect.txt, written by the weave), so Field.get/set, Constructor.newInstance and Gson work for them.
  */
 public class EmlReflectionSupplier implements ReflectionSupplier {
@@ -35,7 +35,7 @@ public class EmlReflectionSupplier implements ReflectionSupplier {
 			} catch (Exception e) {
 				System.err.println("[eagler-modloader] could not read eml-reflect.txt: " + e);
 			}
-			System.out.println("[eagler-modloader] reflection: fields, constructors and methods of " + classes.size() + " mod classes kept available to reflection");
+			System.out.println("[eagler-modloader] reflection: fields and constructors of " + classes.size() + " mod classes kept available to reflection");
 		}
 		return classes;
 	}
@@ -56,8 +56,10 @@ public class EmlReflectionSupplier implements ReflectionSupplier {
 		ClassReader cls = context.getClassSource().get(className);
 		if (cls == null) return Collections.emptyList();
 		List<MethodDescriptor> out = new ArrayList<>();
+		// constructors only: settings libraries and Gson create objects this way. Keeping every method
+		// would keep everything those methods call, which is too much for the compiler with many mods.
 		for (MethodReader m : cls.getMethods()) {
-			if (!m.getName().equals("<clinit>")) out.add(m.getDescriptor());
+			if (m.getName().equals("<init>")) out.add(m.getDescriptor());
 		}
 		return out;
 	}
