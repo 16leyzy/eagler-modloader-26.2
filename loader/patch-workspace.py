@@ -49,6 +49,29 @@ def main():
                }
                result.put(id, compiled);"""
     patch(sfl, old, new, "datapack functions")
+    # and read each result directly: Eaglercraft's handle() completes its new future later, even on a
+    # finished one, so handle(...).join() always stopped the world from loading
+    old = """               functionFutures.forEach((id, functionFuture) -> functionFuture.handle((function, throwable) -> {
+                  if (throwable != null) {
+                     LOGGER.error("Failed to load function {}", id, throwable);
+                  } else {
+                     newFunctions.put(id, function);
+                  }
+
+                  return null;
+               }).join());"""
+    new = """               functionFutures.forEach((id, functionFuture) -> { // eagler-modloader: no join (see above)
+                  if (!functionFuture.isDone()) {
+                     LOGGER.error("Function {} was not ready", id);
+                     return;
+                  }
+                  try {
+                     newFunctions.put(id, functionFuture.join());
+                  } catch (Throwable throwable) {
+                     LOGGER.error("Failed to load function {}", id, throwable);
+                  }
+               });"""
+    patch(sfl, old, new, "datapack function results")
 
     linker = os.path.join(ws, "wasm-toolchain/StandaloneTeaVMLinker.java")
     old = """        if (!result.getProblems().getSevereProblems().isEmpty()) {
